@@ -1,0 +1,29 @@
+{
+  "name": "todo_serer",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "test": "node test-api.js",
+    "test-events": "node test-enhanced-events.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "aws-sdk": "^2.1692.0",
+    "body-parser": "^2.2.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "express": "^5.1.0",
+    "kafkajs": "^2.2.4",
+    "mongodb": "^6.20.0",
+    "mongoose": "^8.19.3",
+    "pg": "^8.11.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}

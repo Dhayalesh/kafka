@@ -1,0 +1,88 @@
+{
+  "snapshotId": "snapshot_2025_11_14_01_14_18",
+  "createdAt": "2025-11-13T19:44:18.804Z",
+  "createdBy": "Auto-CREATE-GROUP",
+  "data": {
+    "groups": [
+      {
+        "_id": "69162d90bd76fbb3e8355a3f",
+        "name": "Group A",
+        "discussion": "Desc",
+        "tasks": [],
+        "createdAt": "2025-11-13T19:12:16.965Z",
+        "updatedAt": "2025-11-13T19:12:16.965Z",
+        "__v": 0
+      },
+      {
+        "_id": "691634698f11a9e42f9a181a",
+        "name": "Group B",
+        "discussion": "Group B Desc\n",
+        "tasks": [],
+        "createdAt": "2025-11-13T19:41:29.111Z",
+        "updatedAt": "2025-11-13T19:41:29.111Z",
+        "__v": 0
+      },
+      {
+        "_id": "69163512895226f6fc0a7e84",
+        "name": "Group C",
+        "discussion": "Grpup C Desc",
+        "tasks": [],
+        "createdAt": "2025-11-13T19:44:18.796Z",
+        "updatedAt": "2025-11-13T19:44:18.796Z",
+        "__v": 0
+      }
+    ],
+    "tasks": [],
+    "comments": [],
+    "users": [
+      {
+        "_id": "69162d56bd76fbb3e8355a35",
+        "username": "Avinash",
+        "password": "Avinash123",
+        "__v": 0,
+        "createdAt": "2025-11-13T19:11:18.549Z",
+        "updatedAt": "2025-11-13T19:11:18.549Z"
+      },
+      {
+        "_id": "69162d56bd76fbb3e8355a36",
+        "username": "Dhaya",
+        "password": "Dhaya123",
+        "__v": 0,
+        "createdAt": "2025-11-13T19:11:18.551Z",
+        "updatedAt": "2025-11-13T19:11:18.551Z"
+      },
+      {
+        "_id": "69162d56bd76fbb3e8355a37",
+        "username": "Ashok",
+        "password": "Ashok123",
+        "__v": 0,
+        "createdAt": "2025-11-13T19:11:18.551Z",
+        "updatedAt": "2025-11-13T19:11:18.551Z"
+      },
+      {
+        "_id": "69162d56bd76fbb3e8355a38",
+        "username": "Arun",
+        "password": "Arun123",
+        "__v": 0,
+        "createdAt": "2025-11-13T19:11:18.552Z",
+        "updatedAt": "2025-11-13T19:11:18.552Z"
+      },
+      {
+        "_id": "69162d56bd76fbb3e8355a39",
+        "username": "Cathrine",
+        "password": "Cathrine123",
+        "__v": 0,
+        "createdAt": "2025-11-13T19:11:18.552Z",
+        "updatedAt": "2025-11-13T19:11:18.552Z"
+      }
+    ]
+  },
+  "metadata": {
+    "counts": {
+      "groups": 3,
+      "tasks": 0,
+      "comments": 0,
+      "users": 5
+    }
+  }
+}

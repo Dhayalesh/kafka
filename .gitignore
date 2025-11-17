@@ -1,0 +1,28 @@
+# Node.js
+/todo/node_modules
+/todo_serer/node_modules
+/todo/dist
+/todo_serer/dist
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Go
+/go-consumer/consumer.exe
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDE and local files
+.claude/
+.vscode/
+
+# Data
+kafka-data/
+
+# Logs
+*.log

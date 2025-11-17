@@ -1,0 +1,84 @@
+services:
+  # 🧠 Zookeeper Service (Required for Kafka)
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.1
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-log:/var/lib/zookeeper/log
+
+  # 🚀 Apache Kafka Service
+  kafka:
+    image: confluentinc/cp-kafka:7.6.1
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+
+      # 👇 Two listeners: one for host, one for Docker internal network
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,DOCKER://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,DOCKER://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,DOCKER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+
+  # 🕒 TimescaleDB Service (Time-Series Database)
+  timescaledb:
+    image: timescale/timescaledb:latest-pg16
+    container_name: timescaledb
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: todo_history
+    ports:
+      - "5432:5432"
+    volumes:
+      - timescaledb-data:/var/lib/postgresql/data
+
+  # 🧰 Adminer (Database Web UI)
+  adminer:
+    image: adminer:latest
+    container_name: adminer
+    restart: always
+    depends_on:
+      - timescaledb
+    ports:
+      - "8080:8080"
+
+  # 📊 Kafdrop (Kafka Web UI)
+  kafdrop:
+    image: obsidiandynamics/kafdrop
+    container_name: kafdrop
+    depends_on:
+      - kafka
+    ports:
+      - "9000:9000"
+    environment:
+      # 👇 Use internal Docker hostname and port
+      KAFKA_BROKERCONNECT: "kafka:29092"
+      JVM_OPTS: "-Xms32M -Xmx64M"
+      SERVER_PORT: 9000
+
+volumes:
+  zookeeper-data:
+  zookeeper-log:
+  kafka-data:
+  timescaledb-data:
