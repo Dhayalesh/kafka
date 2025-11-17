@@ -8,11 +8,12 @@
 5. [Database Schemas](#database-schemas)
 6. [API Endpoints](#api-endpoints)
 7. [Kafka Event System](#kafka-event-system)
-8. [Configuration](#configuration)
-9. [Setup & Installation](#setup--installation)
-10. [Code Components](#code-components)
-11. [Security Considerations](#security-considerations)
-12. [Testing](#testing)
+8. [MongoDB Snapshot & Restore System](#mongodb-snapshot--restore-system)
+9. [Configuration](#configuration)
+10. [Setup & Installation](#setup--installation)
+11. [Code Components](#code-components)
+12. [Security Considerations](#security-considerations)
+13. [Testing](#testing)
 
 ---
 
@@ -257,11 +258,15 @@ todo_serer/
 │   ├── tasks.js                  # Task CRUD endpoints
 │   ├── groups.js                 # Group CRUD endpoints
 │   ├── auth.js                   # Authentication endpoints
-│   └── logs.js                   # Event log query endpoints
+│   ├── logs.js                   # Event log query endpoints
+│   └── restore.js                # Snapshot restore endpoints
 │
 ├── kafka/                        # Kafka integration
 │   ├── producer.js               # Kafka event publisher (ACTIVE)
 │   └── consumer.js               # Legacy consumer (DEPRECATED)
+│
+├── services/                     # Business logic services
+│   └── snapshotCreator.js        # MongoDB snapshot creation service
 │
 └── db/                           # Database utilities
     ├── timescale.js              # TimescaleDB connection & queries
@@ -281,7 +286,9 @@ todo_serer/
 | `routes/groups.js` | ~200 | Group CRUD + task creation |
 | `routes/auth.js` | ~30 | Login and user endpoints |
 | `routes/logs.js` | ~50 | Event log query endpoints |
+| `routes/restore.js` | ~135 | Snapshot restore endpoints |
 | `kafka/producer.js` | ~100 | Kafka connection & event publishing |
+| `services/snapshotCreator.js` | ~50 | MongoDB snapshot creation service |
 | `db/timescale.js` | ~200 | TimescaleDB setup & queries |
 | `db/seedUsers.js` | ~40 | Default user creation |
 
@@ -1031,6 +1038,71 @@ Get all comments for a task.
 
 ---
 
+### Snapshot & Restore Endpoints
+
+#### GET /api/restore/snapshots
+List all available snapshots from S3.
+
+**Response:**
+```json
+{
+  "success": true,
+  "snapshots": [
+    {
+      "snapshotId": "snapshot_2025_02_25_17_40_10",
+      "createdAt": "2025-02-25T17:40:10.000Z",
+      "fileSizeKB": 245,
+      "s3Key": "snapshots/snapshot_2025_02_25_17_40_10.json"
+    }
+  ]
+}
+```
+
+**Implementation:** [routes/restore.js](routes/restore.js:18-44)
+
+---
+
+#### POST /api/restore/:snapshotId
+Restore database to a specific snapshot state.
+
+**Request:**
+```http
+POST /api/restore/snapshot_2025_02_25_17_40_10
+Content-Type: application/json
+
+{
+  "user": "Admin"
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "Database restored successfully",
+  "snapshotId": "snapshot_2025_02_25_17_40_10",
+  "restoredCounts": {
+    "groups": 5,
+    "tasks": 23,
+    "comments": 47,
+    "users": 3
+  }
+}
+```
+
+**Restoration Process:**
+1. Downloads snapshot JSON from S3
+2. Verifies snapshot ID matches request
+3. Drops all MongoDB collections (Groups, Tasks, Comments, Users)
+4. Inserts snapshot data directly using `collection.insertMany()`
+5. Returns restored counts
+
+**⚠️ Warning:** This operation completely replaces the database with snapshot data. All current data will be lost!
+
+**Implementation:** [routes/restore.js](routes/restore.js:47-131)
+
+---
+
 ### Event Log Endpoints (TimescaleDB)
 
 #### GET /api/logs/groups
@@ -1329,6 +1401,112 @@ setImmediate(async () => {
 
 ---
 
+## MongoDB Snapshot & Restore System
+
+### Overview
+Complete time machine system for MongoDB data with automatic snapshots triggered via Kafka events and processed by Go consumer.
+
+### Architecture
+1. **Node.js API** → Database operations → Kafka `SNAPSHOT_TRIGGER` events
+2. **Go Consumer** → Processes triggers → Creates MongoDB snapshots → Kafka `todo-snapshots` topic
+3. **Snapshot Processor** → Consumes snapshot JSON → Uploads to S3
+4. **TimescaleDB** → Logs snapshot references (not S3 paths)
+
+### Single Service Command
+
+```bash
+cd go-consumer
+go run unified-main.go
+```
+
+This single command runs:
+- **Main Consumer**: Processes events and snapshot triggers
+- **Snapshot Processor**: Uploads snapshot JSON to S3
+- **Both services** run concurrently in the same process
+
+### Kafka Topics
+- `todo-history-events` - Regular events and snapshot triggers
+- `todo-snapshots` - Complete snapshot JSON data
+
+### Automatic Triggers
+Snapshots are automatically created on every database operation:
+- Group: CREATE, UPDATE, DELETE
+- Task: CREATE, UPDATE, DELETE, STATUS_CHANGE
+- Comment: CREATE
+
+### Snapshot Structure
+
+Each snapshot is a single JSON file containing:
+```json
+{
+  "snapshotId": "snapshot_2025_02_25_17_40_10",
+  "createdAt": "2025-02-25T17:40:10Z",
+  "createdBy": "Admin",
+  "data": {
+    "groups": [...],
+    "tasks": [...],
+    "comments": [...],
+    "users": [...]
+  },
+  "metadata": {
+    "counts": {
+      "groups": 5,
+      "tasks": 23,
+      "comments": 47,
+      "users": 3
+    }
+  }
+}
+```
+
+### Storage Location
+- S3 Bucket: `s3://your-bucket/snapshots/`
+- Files: `snapshot_YYYY_MM_DD_HH_MM_SS.json`
+
+### Environment Variables
+```bash
+AWS_ACCESS_KEY_ID=your_access_key
+AWS_SECRET_ACCESS_KEY=your_secret_key
+AWS_REGION=us-east-1
+S3_BUCKET_NAME=your-snapshots-bucket
+```
+
+### TimescaleDB Logging
+All snapshot operations are logged with events:
+- `SNAPSHOT_CREATED`
+- `SNAPSHOT_RESTORED`
+- `SNAPSHOT_DELETED`
+
+### Usage Examples
+
+#### Create Snapshot
+```javascript
+const result = await snapshotService.createSnapshot('Admin');
+console.log(result.snapshotId); // snapshot_2025_02_25_17_40_10
+```
+
+#### Restore Snapshot
+```javascript
+const result = await snapshotService.restoreSnapshot('snapshot_2025_02_25_17_40_10', 'Admin');
+console.log(result.restoredCounts); // { groups: 5, tasks: 23, ... }
+```
+
+#### List Snapshots
+```javascript
+const snapshots = await snapshotService.listSnapshots();
+snapshots.forEach(s => console.log(s.snapshotId, s.createdAt));
+```
+
+### System Behavior
+
+1. **Snapshot Creation**: Reads all MongoDB collections → Creates single JSON file → Logs to TimescaleDB
+2. **Snapshot Restoration**: Clears MongoDB → Inserts data from JSON → Logs to TimescaleDB
+3. **No Maintenance Mode**: System remains operational during snapshots
+4. **Complete State**: Every snapshot contains 100% of MongoDB data
+5. **Audit Trail**: All operations logged in TimescaleDB with metadata
+
+---
+
 ## Configuration
 
 ### Environment Variables
@@ -1355,6 +1533,12 @@ TIMESCALE_PORT=5432
 TIMESCALE_DATABASE=todo_history
 TIMESCALE_USER=postgres
 TIMESCALE_PASSWORD=postgres
+
+# AWS S3 Configuration (for Snapshot Storage)
+AWS_ACCESS_KEY_ID=your_access_key
+AWS_SECRET_ACCESS_KEY=your_secret_key
+AWS_REGION=us-east-1
+S3_BUCKET_NAME=your-snapshots-bucket
 ```
 
 ### Connection Strings
@@ -1546,6 +1730,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/logs', logRoutes);
+app.use('/api/restore', restoreRoutes);
 
 // Start Server
 app.listen(PORT, () => {
@@ -1698,6 +1883,78 @@ async function seedUsers() {
     console.log('✓ Default users seeded');
   }
 }
+```
+
+### Snapshot Creator Service
+
+**File:** [services/snapshotCreator.js](services/snapshotCreator.js)
+
+**Function:** `createAndSendSnapshot(triggerReason, user)`
+
+**Purpose:**
+Creates a complete MongoDB snapshot and publishes it to Kafka for processing by the Go consumer.
+
+**Parameters:**
+- `triggerReason`: String describing what triggered the snapshot (e.g., 'GROUP_CREATED', 'TASK_UPDATED')
+- `user`: Username of the person who triggered the snapshot
+
+**Implementation:**
+```javascript
+async function createAndSendSnapshot(triggerReason, user) {
+  // Generate snapshot ID with timestamp
+  const now = new Date();
+  const snapshotId = `snapshot_${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, '0')}_...`;
+
+  // Read all MongoDB collections in parallel
+  const [groups, tasks, comments, users] = await Promise.all([
+    Group.find({}).lean(),
+    Task.find({}).lean(),
+    Comment.find({}).lean(),
+    User.find({}).lean()
+  ]);
+
+  // Create snapshot object
+  const snapshot = {
+    snapshotId,
+    createdAt: now.toISOString(),
+    createdBy: user,
+    data: { groups, tasks, comments, users },
+    metadata: {
+      counts: {
+        groups: groups.length,
+        tasks: tasks.length,
+        comments: comments.length,
+        users: users.length
+      }
+    }
+  };
+
+  // Send to Kafka topic 'todo-snapshots'
+  await kafkaProducer.publishSnapshotToKafka(snapshotId, JSON.stringify(snapshot, null, 2));
+
+  console.log(`📸 Snapshot created and sent to Kafka: ${snapshotId}`);
+}
+```
+
+**Snapshot Flow:**
+1. Function is called after database operations (group/task/comment creation/update/delete)
+2. Reads all data from MongoDB collections using `.lean()` for performance
+3. Creates structured snapshot JSON with metadata
+4. Publishes to Kafka topic `todo-snapshots`
+5. Go consumer picks up the snapshot
+6. Go consumer uploads snapshot to S3
+7. TimescaleDB logs the snapshot creation event
+
+**Usage in Route Handlers:**
+```javascript
+// Example: After creating a group
+const group = await Group.create(req.body);
+res.json({ group, message: 'Group created successfully' });
+
+// Trigger snapshot in background
+setImmediate(async () => {
+  await createAndSendSnapshot('GROUP_CREATED', 'Admin');
+});
 ```
 
 ### Change Detection Logic
