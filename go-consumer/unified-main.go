@@ -75,14 +75,9 @@ func startMainConsumer() {
 			continue
 		}
 
-		groupId := e.Payload.GroupId
-		groupName := e.Payload.GroupName
 		taskId := e.Payload.TaskId
 		taskName := e.Payload.TaskName
 
-		if e.Payload.Entity == "Group" {
-			groupId = e.Payload.EntityId
-		}
 		if e.Payload.Entity == "Task" {
 			taskId = e.Payload.EntityId
 		}
@@ -91,8 +86,6 @@ func startMainConsumer() {
 			e.EventType,
 			e.Payload.Entity,
 			e.Payload.EntityId,
-			groupId,
-			groupName,
 			taskId,
 			taskName,
 			e.Payload.Changes,
@@ -111,11 +104,10 @@ func startMainConsumer() {
 			displayMsg = fmt.Sprintf("%s operation on %s", e.EventType, e.Payload.Entity)
 		}
 
-		fmt.Printf("📝 [%s] %s - %s (Group: %s, Task: %s)\n",
+		fmt.Printf("📝 [%s] %s - %s (Task: %s)\n",
 			e.EventType,
 			ts.Format("15:04:05"),
 			displayMsg,
-			groupName,
 			taskName,
 		)
 	}
@@ -185,8 +177,6 @@ type Event struct {
 type Payload struct {
 	Entity    string `json:"entity"`
 	EntityId  string `json:"entityId"`
-	GroupId   string `json:"groupId,omitempty"`
-	GroupName string `json:"groupName,omitempty"`
 	TaskId    string `json:"taskId,omitempty"`
 	TaskName  string `json:"taskName,omitempty"`
 	Changes   string `json:"changes"`

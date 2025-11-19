@@ -1,4 +1,3 @@
-const Group = require('../models/Group');
 const Task = require('../models/Task');
 const Comment = require('../models/Comment');
 const User = require('../models/User');
@@ -10,8 +9,7 @@ async function createAndSendSnapshot(triggerReason, user) {
     const snapshotId = `snapshot_${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, '0')}_${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}_${String(now.getMinutes()).padStart(2, '0')}_${String(now.getSeconds()).padStart(2, '0')}`;
 
     // Read all collections
-    const [groups, tasks, comments, users] = await Promise.all([
-      Group.find({}).lean(),
+    const [tasks, comments, users] = await Promise.all([
       Task.find({}).lean(),
       Comment.find({}).lean(),
       User.find({}).lean()
@@ -23,14 +21,12 @@ async function createAndSendSnapshot(triggerReason, user) {
       createdAt: now.toISOString(),
       createdBy: user,
       data: {
-        groups: groups || [],
         tasks: tasks || [],
         comments: comments || [],
         users: users || []
       },
       metadata: {
         counts: {
-          groups: groups.length,
           tasks: tasks.length,
           comments: comments.length,
           users: users.length
@@ -40,7 +36,7 @@ async function createAndSendSnapshot(triggerReason, user) {
 
     // Send snapshot to Kafka topic
     await kafkaProducer.publishSnapshotToKafka(snapshotId, JSON.stringify(snapshot, null, 2));
-    
+
     console.log(`📸 Snapshot created and sent to Kafka: ${snapshotId}`);
   } catch (error) {
     console.error('Error creating snapshot:', error);

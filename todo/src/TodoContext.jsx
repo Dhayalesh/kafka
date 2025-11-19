@@ -12,41 +12,28 @@ export const useTodo = () => {
 }
 
 export const TodoProvider = ({ children }) => {
-  const [groups, setGroups] = useState([])
+  const [tasks, setTasks] = useState([])
   const [loading, setLoading] = useState(false)
 
-  const loadGroups = async () => {
+  const loadTasks = async () => {
     setLoading(true)
     try {
-      const result = await todoService.getGroups()
+      const result = await todoService.getTasks()
       if (result.success) {
-        setGroups(result.data)
+        setTasks(result.data)
       }
     } catch (error) {
-      console.error('Failed to load groups:', error)
+      console.error('Failed to load tasks:', error)
     } finally {
       setLoading(false)
     }
   }
 
-  const addGroup = async (name, discussion) => {
+  const addTask = async (taskData) => {
     try {
-      const result = await todoService.createGroup({ name, discussion })
+      const result = await todoService.createTask(taskData)
       if (result.success) {
-        setGroups([...groups, result.data])
-      }
-      return result
-    } catch (error) {
-      console.error('Failed to create group:', error)
-      return { success: false, error }
-    }
-  }
-
-  const addTask = async (groupId, taskData) => {
-    try {
-      const result = await todoService.createTask(groupId, taskData)
-      if (result.success) {
-        await loadGroups()
+        await loadTasks()
       }
       return result
     } catch (error) {
@@ -59,11 +46,14 @@ export const TodoProvider = ({ children }) => {
     try {
       const result = await todoService.deleteTask(taskId)
       if (result.success) {
-        await loadGroups()
+        await loadTasks()
+      } else {
+        alert(`Failed to delete task: ${result.error?.message || 'Task not found. Please refresh the page.'}`)
       }
       return result
     } catch (error) {
       console.error('Failed to delete task:', error)
+      alert('Failed to delete task. Please refresh the page.')
       return { success: false, error }
     }
   }
@@ -72,7 +62,7 @@ export const TodoProvider = ({ children }) => {
     try {
       const result = await todoService.updateTaskStatus(taskId, newStatus)
       if (result.success) {
-        await loadGroups()
+        await loadTasks()
       }
       return result
     } catch (error) {
@@ -81,15 +71,15 @@ export const TodoProvider = ({ children }) => {
     }
   }
 
-  const deleteGroup = async (groupId) => {
+  const updateTaskProgress = async (taskId, progress) => {
     try {
-      const result = await todoService.deleteGroup(groupId)
+      const result = await todoService.updateTaskProgress(taskId, progress)
       if (result.success) {
-        await loadGroups()
+        await loadTasks()
       }
       return result
     } catch (error) {
-      console.error('Failed to delete group:', error)
+      console.error('Failed to update task progress:', error)
       return { success: false, error }
     }
   }
@@ -98,7 +88,7 @@ export const TodoProvider = ({ children }) => {
     try {
       const result = await todoService.addComment(taskId, comment)
       if (result.success) {
-        await loadGroups()
+        await loadTasks()
       }
       return result
     } catch (error) {
@@ -107,48 +97,18 @@ export const TodoProvider = ({ children }) => {
     }
   }
 
-  const updateGroup = async (groupId, groupData) => {
-    try {
-      const result = await todoService.updateGroup(groupId, groupData)
-      if (result.success) {
-        await loadGroups()
-      }
-      return result
-    } catch (error) {
-      console.error('Failed to update group:', error)
-      return { success: false, error }
-    }
-  }
-
   const updateTask = async (taskId, taskData) => {
     try {
       const result = await todoService.updateTask(taskId, taskData)
       if (result.success) {
-        await loadGroups()
+        await loadTasks()
+      } else {
+        alert(`Failed to update task: ${result.error?.message || 'Task not found. Please refresh the page.'}`)
       }
       return result
     } catch (error) {
       console.error('Failed to update task:', error)
-      return { success: false, error }
-    }
-  }
-
-  const getGroupLogs = async (groupId) => {
-    try {
-      const result = await todoService.getGroupLogs(groupId)
-      return result
-    } catch (error) {
-      console.error('Failed to load logs:', error)
-      return { success: false, error }
-    }
-  }
-
-  const getAllGroupsLogs = async () => {
-    try {
-      const result = await todoService.getAllGroupsLogs()
-      return result
-    } catch (error) {
-      console.error('Failed to load groups logs:', error)
+      alert('Failed to update task. Please refresh the page.')
       return { success: false, error }
     }
   }
@@ -167,7 +127,7 @@ export const TodoProvider = ({ children }) => {
     try {
       const result = await todoService.restoreSnapshot(snapshotId)
       if (result.success) {
-        await loadGroups()
+        await loadTasks()
       }
       return result
     } catch (error) {
@@ -176,27 +136,21 @@ export const TodoProvider = ({ children }) => {
     }
   }
 
-
-
   useEffect(() => {
-    loadGroups()
+    loadTasks()
   }, [])
 
   return (
     <TodoContext.Provider value={{
-      groups,
+      tasks,
       loading,
-      loadGroups,
-      addGroup,
-      updateGroup,
-      deleteGroup,
+      loadTasks,
       addTask,
       updateTask,
       deleteTask,
       updateTaskStatus,
+      updateTaskProgress,
       addComment,
-      getGroupLogs,
-      getAllGroupsLogs,
       getSnapshots,
       restoreSnapshot
     }}>

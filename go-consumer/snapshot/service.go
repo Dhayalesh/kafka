@@ -19,14 +19,12 @@ type SnapshotData struct {
 	CreatedAt  time.Time `json:"createdAt"`
 	CreatedBy  string    `json:"createdBy"`
 	Data       struct {
-		Groups   []bson.M `json:"groups"`
 		Tasks    []bson.M `json:"tasks"`
 		Comments []bson.M `json:"comments"`
 		Users    []bson.M `json:"users"`
 	} `json:"data"`
 	Metadata struct {
 		Counts struct {
-			Groups   int `json:"groups"`
 			Tasks    int `json:"tasks"`
 			Comments int `json:"comments"`
 			Users    int `json:"users"`
@@ -52,7 +50,7 @@ func CreateSnapshot(triggerReason, user string) error {
 	defer client.Disconnect(context.Background())
 
 	database := client.Database("todo_manager")
-	
+
 	// List collections to debug
 	collections, err := database.ListCollectionNames(context.Background(), bson.M{})
 	if err == nil {
@@ -65,23 +63,9 @@ func CreateSnapshot(triggerReason, user string) error {
 	snapshot.CreatedBy = user
 
 	// Initialize slices to avoid null values
-	snapshot.Data.Groups = make([]bson.M, 0)
 	snapshot.Data.Tasks = make([]bson.M, 0)
 	snapshot.Data.Comments = make([]bson.M, 0)
 	snapshot.Data.Users = make([]bson.M, 0)
-
-	groupsCursor, err := database.Collection("groups").Find(context.Background(), bson.M{})
-	if err != nil {
-		return err
-	}
-	var groups []bson.M
-	if err = groupsCursor.All(context.Background(), &groups); err != nil {
-		return err
-	}
-	if groups != nil {
-		snapshot.Data.Groups = groups
-	}
-	fmt.Printf("Found %d groups\n", len(snapshot.Data.Groups))
 
 	tasksCursor, err := database.Collection("tasks").Find(context.Background(), bson.M{})
 	if err != nil {
@@ -123,14 +107,13 @@ func CreateSnapshot(triggerReason, user string) error {
 	fmt.Printf("Found %d users\n", len(snapshot.Data.Users))
 
 	// Check if database has any meaningful data
-	totalRecords := len(snapshot.Data.Groups) + len(snapshot.Data.Tasks) + len(snapshot.Data.Comments)
+	totalRecords := len(snapshot.Data.Tasks) + len(snapshot.Data.Comments)
 	fmt.Printf("Total records found: %d\n", totalRecords)
 	if totalRecords == 0 {
 		fmt.Printf("⚠️ Skipping snapshot - database is empty\n")
 		return fmt.Errorf("database is empty, no snapshot created")
 	}
 
-	snapshot.Metadata.Counts.Groups = len(snapshot.Data.Groups)
 	snapshot.Metadata.Counts.Tasks = len(snapshot.Data.Tasks)
 	snapshot.Metadata.Counts.Comments = len(snapshot.Data.Comments)
 	snapshot.Metadata.Counts.Users = len(snapshot.Data.Users)
@@ -147,8 +130,7 @@ func CreateSnapshot(triggerReason, user string) error {
 
 	fileSizeKB := len(jsonData) / 1024
 
-	changes := fmt.Sprintf("Snapshot created with %d groups, %d tasks, %d comments, %d users - Reference: %s",
-		snapshot.Metadata.Counts.Groups,
+	changes := fmt.Sprintf("Snapshot created with %d tasks, %d comments, %d users - Reference: %s",
 		snapshot.Metadata.Counts.Tasks,
 		snapshot.Metadata.Counts.Comments,
 		snapshot.Metadata.Counts.Users,
@@ -158,8 +140,6 @@ func CreateSnapshot(triggerReason, user string) error {
 		"SNAPSHOT_CREATED",
 		"SYSTEM",
 		snapshotID,
-		"",
-		"",
 		"",
 		"",
 		changes,

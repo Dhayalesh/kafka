@@ -3,6 +3,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const kafkaProducer = require('./kafka/producer');
+const timescaleDB = require('./db/timescale');
 // NOTE: Consumer removed - Go service handles consuming events and writing to TimescaleDB
 // Express only publishes events and provides read API for logs
 
@@ -19,6 +20,16 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/todo_mana
     // Seed default users
     const seedUsers = require('./db/seedUsers');
     await seedUsers();
+
+    // Initialize TimescaleDB
+    try {
+      await timescaleDB.initializeDatabase();
+      console.log('✅ TimescaleDB initialized');
+    } catch (error) {
+      console.error('⚠️ TimescaleDB initialization failed:', error.message);
+      console.log('Logs will not be available until TimescaleDB is configured');
+    }
+
     // Connect Kafka producer only (Go consumer handles writing logs)
     if (process.env.KAFKA_ENABLED !== 'false') {
       await kafkaProducer.connect();
@@ -34,7 +45,6 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/todo_mana
 
 // Routes
 app.use('/api/auth', require('./routes/auth'));
-app.use('/api/groups', require('./routes/groups'));
 app.use('/api/tasks', require('./routes/tasks'));
 app.use('/api/logs', require('./routes/logs'));
 app.use('/api/restore', require('./routes/restore'));

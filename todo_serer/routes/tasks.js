@@ -1,10 +1,78 @@
 const express = require('express');
 const Task = require('../models/Task');
 const Comment = require('../models/Comment');
-const Group = require('../models/Group');
 const kafkaProducer = require('../kafka/producer');
 const { createAndSendSnapshot } = require('../services/snapshotCreator');
 const router = express.Router();
+
+// GET /tasks - Get all tasks
+router.get('/', async (req, res) => {
+  try {
+    const tasks = await Task.find().populate('comments');
+    res.json({ success: true, data: tasks });
+  } catch (error) {
+    res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: error.message } });
+  }
+});
+
+// POST /tasks - Create a new task
+router.post('/', async (req, res) => {
+  try {
+    const { name, description, startDate, endDate, user, workspace } = req.body;
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Task name is required', details: { field: 'name', value: name || '' } }
+      });
+    }
+
+    const task = new Task({
+      name,
+      description,
+      startDate,
+      endDate
+    });
+    await task.save();
+
+    res.json({ success: true, data: task });
+
+    // Publish events to Kafka after successful response
+    setImmediate(() => {
+      const details = [];
+      if (description) details.push(`description: "${description}"`);
+      if (startDate) details.push(`start date: "${startDate}"`);
+      if (endDate) details.push(`end date: "${endDate}"`);
+
+      kafkaProducer.publishEvent('TASK_CREATED', {
+        entity: 'Task',
+        entityId: task._id.toString(),
+        taskName: name,
+        changes: `Task "${name}" created with status "New"${details.length > 0 ? ', ' + details.join(', ') : ''}`,
+        user: user || 'system',
+        workspace: workspace || 'default'
+      });
+      createAndSendSnapshot('TASK_CREATED', user || 'system');
+    });
+  } catch (error) {
+    res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: error.message } });
+  }
+});
+
+// GET /tasks/:taskId - Get a specific task with all its comments
+router.get('/:taskId', async (req, res) => {
+  try {
+    const task = await Task.findOne({ _id: req.params.taskId }).populate('comments');
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Task not found', details: { taskId: req.params.taskId } }
+      });
+    }
+    res.json({ success: true, data: task });
+  } catch (error) {
+    res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: error.message } });
+  }
+});
 
 // PUT /tasks/:taskId - Update task name, description, and dates
 router.put('/:taskId', async (req, res) => {
@@ -17,17 +85,24 @@ router.put('/:taskId', async (req, res) => {
       });
     }
 
-    const oldTask = await Task.findById(req.params.taskId).populate('groupId');
-    const task = await Task.findByIdAndUpdate(
-      req.params.taskId,
-      { name, description, startDate, endDate },
-      { new: true }
-    ).populate('comments').populate('groupId');
-
-    if (!task) {
+    const oldTask = await Task.findOne({ _id: req.params.taskId });
+    if (!oldTask) {
       return res.status(404).json({
         success: false,
         error: { code: 'NOT_FOUND', message: 'Task not found', details: { taskId: req.params.taskId } }
+      });
+    }
+
+    const task = await Task.findOneAndUpdate(
+      { _id: req.params.taskId },
+      { name, description, startDate, endDate },
+      { new: true, runValidators: true }
+    ).populate('comments');
+
+    if (!task) {
+      return res.status(500).json({
+        success: false,
+        error: { code: 'UPDATE_FAILED', message: 'Failed to update task', details: { taskId: req.params.taskId } }
       });
     }
 
@@ -52,8 +127,6 @@ router.put('/:taskId', async (req, res) => {
       kafkaProducer.publishEvent('TASK_UPDATED', {
         entity: 'Task',
         entityId: task._id.toString(),
-        groupId: task.groupId?._id?.toString() || task.groupId?.toString(),
-        groupName: task.groupId?.name || 'Unknown',
         taskName: name,
         changes: changes.join(', '),
         user: user || 'system',
@@ -79,12 +152,22 @@ router.put('/:taskId/status', async (req, res) => {
       });
     }
 
-    const oldTask = await Task.findById(req.params.taskId).populate('groupId');
-    const task = await Task.findByIdAndUpdate(
-      req.params.taskId,
-      { status },
+    const oldTask = await Task.findOne({ _id: req.params.taskId });
+
+    // Auto-set progress based on status
+    let progress = oldTask.progress || 0;
+    if (status === 'New' || status === 'Backlog') {
+      progress = 0;
+    } else if (status === 'Completed' || status === 'Approved') {
+      progress = 100;
+    }
+    // For 'In Progress', keep current progress or set to previous value
+
+    const task = await Task.findOneAndUpdate(
+      { _id: req.params.taskId },
+      { status, progress },
       { new: true }
-    ).populate('comments').populate('groupId');
+    ).populate('comments');
 
     if (!task) {
       return res.status(404).json({
@@ -97,13 +180,12 @@ router.put('/:taskId/status', async (req, res) => {
 
     // Publish events to Kafka after successful response
     setImmediate(() => {
+      const changes = `Task status changed from "${oldTask.status}" to "${status}"${oldTask.progress !== progress ? `, progress updated to ${progress}%` : ''}`;
       kafkaProducer.publishEvent('STATUS_CHANGED', {
         entity: 'Task',
         entityId: task._id.toString(),
-        groupId: task.groupId?._id?.toString() || task.groupId?.toString(),
-        groupName: task.groupId?.name || 'Unknown',
         taskName: task.name,
-        changes: `Task status changed from "${oldTask.status}" to "${status}"`,
+        changes,
         user: user || 'system',
         workspace: workspace || 'default'
       });
@@ -114,11 +196,56 @@ router.put('/:taskId/status', async (req, res) => {
   }
 });
 
+// PUT /tasks/:taskId/progress - Update task progress (for In Progress tasks)
+router.put('/:taskId/progress', async (req, res) => {
+  try {
+    const { progress, user, workspace } = req.body;
+
+    if (typeof progress !== 'number' || progress < 0 || progress > 100) {
+      return res.status(400).json({
+        success: false,
+        error: { code: 'VALIDATION_ERROR', message: 'Progress must be a number between 0 and 100', details: { field: 'progress', value: progress } }
+      });
+    }
+
+    const oldTask = await Task.findOne({ _id: req.params.taskId });
+    if (!oldTask) {
+      return res.status(404).json({
+        success: false,
+        error: { code: 'NOT_FOUND', message: 'Task not found', details: { taskId: req.params.taskId } }
+      });
+    }
+
+    const task = await Task.findOneAndUpdate(
+      { _id: req.params.taskId },
+      { progress },
+      { new: true }
+    ).populate('comments');
+
+    res.json({ success: true, data: task });
+
+    // Publish events to Kafka after successful response
+    setImmediate(() => {
+      kafkaProducer.publishEvent('PROGRESS_UPDATED', {
+        entity: 'Task',
+        entityId: task._id.toString(),
+        taskName: task.name,
+        changes: `Task progress updated from ${oldTask.progress}% to ${progress}%`,
+        user: user || 'system',
+        workspace: workspace || 'default'
+      });
+      createAndSendSnapshot('PROGRESS_UPDATED', user || 'system');
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: error.message } });
+  }
+});
+
 // DELETE /tasks/:taskId - Delete a task and all its comments
 router.delete('/:taskId', async (req, res) => {
   try {
     const { user, workspace } = req.body;
-    const task = await Task.findById(req.params.taskId).populate('groupId');
+    const task = await Task.findOne({ _id: req.params.taskId });
     if (!task) {
       return res.status(404).json({
         success: false,
@@ -126,15 +253,10 @@ router.delete('/:taskId', async (req, res) => {
       });
     }
 
-    const groupId = task.groupId?._id?.toString() || task.groupId?.toString();
-    const groupName = task.groupId?.name || 'Unknown';
-
-    // Remove task from group
-    await Group.findByIdAndUpdate(groupId, { $pull: { tasks: task._id } });
     // Delete all comments for this task
     await Comment.deleteMany({ taskId: req.params.taskId });
     // Delete the task
-    await Task.findByIdAndDelete(req.params.taskId);
+    await Task.findOneAndDelete({ _id: req.params.taskId });
 
     res.json({ success: true, message: 'Task deleted successfully' });
 
@@ -143,8 +265,6 @@ router.delete('/:taskId', async (req, res) => {
       kafkaProducer.publishEvent('TASK_DELETED', {
         entity: 'Task',
         entityId: req.params.taskId,
-        groupId: groupId,
-        groupName: groupName,
         taskName: task.name,
         changes: `Task "${task.name}" with status "${task.status}" was deleted`,
         user: user || 'system',
@@ -152,22 +272,6 @@ router.delete('/:taskId', async (req, res) => {
       });
       createAndSendSnapshot('TASK_DELETED', user || 'system');
     });
-  } catch (error) {
-    res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: error.message } });
-  }
-});
-
-// GET /tasks/:taskId - Get a specific task with all its comments
-router.get('/:taskId', async (req, res) => {
-  try {
-    const task = await Task.findById(req.params.taskId).populate('comments');
-    if (!task) {
-      return res.status(404).json({ 
-        success: false, 
-        error: { code: 'NOT_FOUND', message: 'Task not found', details: { taskId: req.params.taskId } }
-      });
-    }
-    res.json({ success: true, data: task });
   } catch (error) {
     res.status(500).json({ success: false, error: { code: 'INTERNAL_ERROR', message: error.message } });
   }
@@ -184,7 +288,7 @@ router.post('/:taskId/comments', async (req, res) => {
       });
     }
 
-    const task = await Task.findById(req.params.taskId).populate('groupId');
+    const task = await Task.findOne({ _id: req.params.taskId });
     if (!task) {
       return res.status(404).json({
         success: false,
@@ -205,8 +309,6 @@ router.post('/:taskId/comments', async (req, res) => {
       kafkaProducer.publishEvent('COMMENT_ADDED', {
         entity: 'Comment',
         entityId: comment._id.toString(),
-        groupId: task.groupId?._id?.toString() || task.groupId?.toString(),
-        groupName: task.groupId?.name || 'Unknown',
         taskId: task._id.toString(),
         taskName: task.name,
         changes: `Comment added to task "${task.name}": "${text}"`,
@@ -223,14 +325,14 @@ router.post('/:taskId/comments', async (req, res) => {
 // GET /tasks/:taskId/comments - Get all comments for a task
 router.get('/:taskId/comments', async (req, res) => {
   try {
-    const task = await Task.findById(req.params.taskId);
+    const task = await Task.findOne({ _id: req.params.taskId });
     if (!task) {
-      return res.status(404).json({ 
-        success: false, 
+      return res.status(404).json({
+        success: false,
         error: { code: 'NOT_FOUND', message: 'Task not found', details: { taskId: req.params.taskId } }
       });
     }
-    
+
     const comments = await Comment.find({ taskId: req.params.taskId });
     res.json({ success: true, data: comments });
   } catch (error) {

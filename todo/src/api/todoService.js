@@ -31,14 +31,14 @@ class TodoService {
     return response.json();
   }
 
-  async getGroups() {
-    const response = await fetch(`${API_BASE}/groups`);
+  async getTasks() {
+    const response = await fetch(`${API_BASE}/tasks`);
     return response.json();
   }
 
-  async createGroup(data) {
+  async createTask(data) {
     const userInfo = this.getCurrentUser();
-    const response = await fetch(`${API_BASE}/groups`, {
+    const response = await fetch(`${API_BASE}/tasks`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...data, ...userInfo })
@@ -46,28 +46,8 @@ class TodoService {
     return response.json();
   }
 
-  async getGroup(id) {
-    const response = await fetch(`${API_BASE}/groups/${id}`);
-    return response.json();
-  }
-
-  async deleteGroup(id) {
-    const userInfo = this.getCurrentUser();
-    const response = await fetch(`${API_BASE}/groups/${id}`, {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(userInfo)
-    });
-    return response.json();
-  }
-
-  async createTask(groupId, data) {
-    const userInfo = this.getCurrentUser();
-    const response = await fetch(`${API_BASE}/groups/${groupId}/tasks`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...data, ...userInfo })
-    });
+  async getTask(id) {
+    const response = await fetch(`${API_BASE}/tasks/${id}`);
     return response.json();
   }
 
@@ -77,6 +57,16 @@ class TodoService {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status, ...userInfo })
+    });
+    return response.json();
+  }
+
+  async updateTaskProgress(taskId, progress) {
+    const userInfo = this.getCurrentUser();
+    const response = await fetch(`${API_BASE}/tasks/${taskId}/progress`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ progress, ...userInfo })
     });
     return response.json();
   }
@@ -101,16 +91,6 @@ class TodoService {
     return response.json();
   }
 
-  async updateGroup(id, data) {
-    const userInfo = this.getCurrentUser();
-    const response = await fetch(`${API_BASE}/groups/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...data, ...userInfo })
-    });
-    return response.json();
-  }
-
   async updateTask(id, data) {
     const userInfo = this.getCurrentUser();
     const response = await fetch(`${API_BASE}/tasks/${id}`, {
@@ -121,13 +101,13 @@ class TodoService {
     return response.json();
   }
 
-  async getGroupLogs(groupId) {
-    const response = await fetch(`${API_BASE}/logs/group/${groupId}`);
+  async getTaskLogs(taskId) {
+    const response = await fetch(`${API_BASE}/logs/task/${taskId}`);
     return response.json();
   }
 
-  async getAllGroupsLogs() {
-    const response = await fetch(`${API_BASE}/logs/groups`);
+  async getAllTasksLogs() {
+    const response = await fetch(`${API_BASE}/logs`);
     return response.json();
   }
 
@@ -143,13 +123,6 @@ class TodoService {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(userInfo)
     });
-    return response.json();
-  }
-
-
-
-  async getTaskLogs(taskId) {
-    const response = await fetch(`${API_BASE}/logs/task/${taskId}`);
     return response.json();
   }
 }

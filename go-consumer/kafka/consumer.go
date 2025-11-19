@@ -21,8 +21,6 @@ type Event struct {
 type Payload struct {
 	Entity    string `json:"entity"`
 	EntityId  string `json:"entityId"`
-	GroupId   string `json:"groupId,omitempty"`
-	GroupName string `json:"groupName,omitempty"`
 	TaskId    string `json:"taskId,omitempty"`
 	TaskName  string `json:"taskName,omitempty"`
 	Changes   string `json:"changes"`
@@ -60,16 +58,9 @@ func StartConsumer() {
 			ts = time.Now().UTC()
 		}
 
-		// Extract group and task IDs from the payload (now properly sent by Node.js)
-		groupId := e.Payload.GroupId
-		groupName := e.Payload.GroupName
+		// Extract task IDs from the payload
 		taskId := e.Payload.TaskId
 		taskName := e.Payload.TaskName
-
-		// For Group entities, the groupId is the entityId itself
-		if e.Payload.Entity == "Group" {
-			groupId = e.Payload.EntityId
-		}
 
 		// For Task entities, taskId is the entityId
 		if e.Payload.Entity == "Task" {
@@ -84,13 +75,11 @@ func StartConsumer() {
 			continue
 		}
 
-		// Save to Timescale with proper group and task references
+		// Save to Timescale with proper task references
 		if err := db.InsertLog(
 			e.EventType,
 			e.Payload.Entity,
 			e.Payload.EntityId,
-			groupId,
-			groupName,
 			taskId,
 			taskName,
 			e.Payload.Changes,
@@ -110,11 +99,10 @@ func StartConsumer() {
 			displayMsg = fmt.Sprintf("%s operation on %s", e.EventType, e.Payload.Entity)
 		}
 
-		fmt.Printf("📝 [%s] %s - %s (Group: %s, Task: %s)\n",
+		fmt.Printf("📝 [%s] %s - %s (Task: %s)\n",
 			e.EventType,
 			ts.Format("15:04:05"),
 			displayMsg,
-			groupName,
 			taskName,
 		)
 	}

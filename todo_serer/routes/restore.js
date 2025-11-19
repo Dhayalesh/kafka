@@ -1,7 +1,6 @@
 const express = require('express');
 const AWS = require('aws-sdk');
 const mongoose = require('mongoose');
-const Group = require('../models/Group');
 const Task = require('../models/Task');
 const Comment = require('../models/Comment');
 const User = require('../models/User');
@@ -75,28 +74,22 @@ router.post('/:snapshotId', async (req, res) => {
     console.log('Snapshot data structure:', Object.keys(snapshotData));
     console.log('Data section:', Object.keys(snapshotData.data || {}));
     
-    const { groups, tasks, comments, users } = snapshotData.data || {};
-    
+    const { tasks, comments, users } = snapshotData.data || {};
+
     console.log('Arrays found:', {
-      groups: Array.isArray(groups) ? groups.length : 'not array',
-      tasks: Array.isArray(tasks) ? tasks.length : 'not array', 
+      tasks: Array.isArray(tasks) ? tasks.length : 'not array',
       comments: Array.isArray(comments) ? comments.length : 'not array',
       users: Array.isArray(users) ? users.length : 'not array'
     });
 
     // Complete database replacement - clear everything first
     console.log('Completely clearing database...');
-    await Group.collection.drop().catch(() => {});
     await Task.collection.drop().catch(() => {});
     await Comment.collection.drop().catch(() => {});
     await User.collection.drop().catch(() => {});
-    
+
     console.log('Inserting snapshot data...');
     // Insert snapshot data directly without triggering middleware
-    if (Array.isArray(groups)) {
-      if (groups.length > 0) await Group.collection.insertMany(groups);
-      console.log(`Inserted ${groups.length} groups`);
-    }
     if (Array.isArray(tasks)) {
       if (tasks.length > 0) await Task.collection.insertMany(tasks);
       console.log(`Inserted ${tasks.length} tasks`);
@@ -116,7 +109,6 @@ router.post('/:snapshotId', async (req, res) => {
       message: 'Database restored successfully',
       snapshotId,
       restoredCounts: {
-        groups: Array.isArray(groups) ? groups.length : 0,
         tasks: Array.isArray(tasks) ? tasks.length : 0,
         comments: Array.isArray(comments) ? comments.length : 0,
         users: Array.isArray(users) ? users.length : 0

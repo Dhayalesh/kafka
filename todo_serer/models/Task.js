@@ -1,14 +1,14 @@
 const mongoose = require('mongoose');
 
 const taskSchema = new mongoose.Schema({
-  groupId: { type: mongoose.Schema.Types.ObjectId, ref: 'Group', required: true },
   name: { type: String, required: true },
   description: { type: String, default: '' },
-  status: { 
-    type: String, 
+  status: {
+    type: String,
     enum: ['New', 'Backlog', 'In Progress', 'Completed', 'Approved'],
     default: 'New'
   },
+  progress: { type: Number, default: 0, min: 0, max: 100 },
   startDate: { type: String },
   endDate: { type: String },
   comments: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Comment' }]

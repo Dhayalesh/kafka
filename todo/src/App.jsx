@@ -3,8 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { TodoProvider } from './TodoContext'
 import Login from './components/Login'
 import Header from './components/Header'
-import GroupsList from './GroupsList'
-import GroupDetails from './GroupDetails'
+import TasksList from './TasksList'
 
 function AppContent() {
   const { user, login, logout, loading, isAuthenticated } = useAuth()
@@ -28,8 +27,7 @@ function AppContent() {
       <Header user={user} onLogout={logout} />
       <Router>
         <Routes>
-          <Route path="/" element={<GroupsList />} />
-          <Route path="/group/:groupId" element={<GroupDetails />} />
+          <Route path="/" element={<TasksList />} />
         </Routes>
       </Router>
     </TodoProvider>

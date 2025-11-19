@@ -12,11 +12,11 @@ const pool = new Pool({
   connectionTimeoutMillis: 2000,
 });
 
-// Initialize TimescaleDB tables with proper relationships
+// Initialize TimescaleDB tables
 async function initializeDatabase() {
   const client = await pool.connect();
   try {
-    // Create the event logs table with group and task references
+    // Create the event logs table with task references
     await client.query(`
       CREATE TABLE IF NOT EXISTS todo_event_logs (
         id SERIAL,
@@ -25,9 +25,7 @@ async function initializeDatabase() {
         entity VARCHAR(50) NOT NULL,
         entity_id VARCHAR(100) NOT NULL,
 
-        -- Group and Task relationship fields
-        group_id VARCHAR(100),
-        group_name VARCHAR(255),
+        -- Task relationship fields
         task_id VARCHAR(100),
         task_name VARCHAR(255),
 
@@ -55,10 +53,6 @@ async function initializeDatabase() {
     `);
 
     await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_group_id ON todo_event_logs (group_id, timestamp DESC);
-    `);
-
-    await client.query(`
       CREATE INDEX IF NOT EXISTS idx_task_id ON todo_event_logs (task_id, timestamp DESC);
     `);
 
@@ -66,7 +60,7 @@ async function initializeDatabase() {
       CREATE INDEX IF NOT EXISTS idx_entity ON todo_event_logs (entity, entity_id, timestamp DESC);
     `);
 
-    console.log('✓ TimescaleDB tables initialized with proper group-task relationships');
+    console.log('✓ TimescaleDB tables initialized with task relationships');
   } catch (error) {
     console.error('TimescaleDB initialization error:', error.message);
     throw error;
@@ -75,14 +69,12 @@ async function initializeDatabase() {
   }
 }
 
-// Insert event log with group and task relationship
+// Insert event log with task relationship
 async function insertEventLog(eventData) {
   const {
     eventType,
     entity,
     entityId,
-    groupId,
-    groupName,
     taskId,
     taskName,
     changes,
@@ -93,9 +85,9 @@ async function insertEventLog(eventData) {
   const query = `
     INSERT INTO todo_event_logs (
       event_type, entity, entity_id,
-      group_id, group_name, task_id, task_name,
+      task_id, task_name,
       changes, user_name, workspace, event_data
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     RETURNING *;
   `;
 
@@ -103,8 +95,6 @@ async function insertEventLog(eventData) {
     eventType,
     entity,
     entityId,
-    groupId || null,
-    groupName || null,
     taskId || null,
     taskName || null,
     changes,
@@ -122,34 +112,12 @@ async function insertEventLog(eventData) {
   }
 }
 
-// Get all logs for a specific group (including all tasks under that group)
-async function getGroupLogs(groupId, limit = 100) {
-  const query = `
-    SELECT
-      id, timestamp, event_type, entity, entity_id,
-      group_id, group_name, task_id, task_name,
-      changes, user_name, workspace
-    FROM todo_event_logs
-    WHERE group_id = $1
-    ORDER BY timestamp DESC
-    LIMIT $2;
-  `;
-
-  try {
-    const result = await pool.query(query, [groupId, limit]);
-    return result.rows;
-  } catch (error) {
-    console.error('Error fetching group logs:', error.message);
-    throw error;
-  }
-}
-
 // Get all logs for a specific task
 async function getTaskLogs(taskId, limit = 100) {
   const query = `
     SELECT
       id, timestamp, event_type, entity, entity_id,
-      group_id, group_name, task_id, task_name,
+      task_id, task_name,
       changes, user_name, workspace
     FROM todo_event_logs
     WHERE task_id = $1
@@ -166,31 +134,8 @@ async function getTaskLogs(taskId, limit = 100) {
   }
 }
 
-// Get all groups with their log counts
-async function getGroupsSummary() {
-  const query = `
-    SELECT
-      group_id,
-      group_name,
-      COUNT(*) as log_count,
-      MAX(timestamp) as last_activity
-    FROM todo_event_logs
-    WHERE group_id IS NOT NULL
-    GROUP BY group_id, group_name
-    ORDER BY last_activity DESC;
-  `;
-
-  try {
-    const result = await pool.query(query);
-    return result.rows;
-  } catch (error) {
-    console.error('Error fetching groups summary:', error.message);
-    throw error;
-  }
-}
-
-// Get all tasks under a group with their log counts
-async function getGroupTasksSummary(groupId) {
+// Get all tasks with their log counts
+async function getTasksSummary() {
   const query = `
     SELECT
       task_id,
@@ -198,16 +143,16 @@ async function getGroupTasksSummary(groupId) {
       COUNT(*) as log_count,
       MAX(timestamp) as last_activity
     FROM todo_event_logs
-    WHERE group_id = $1 AND task_id IS NOT NULL
+    WHERE task_id IS NOT NULL
     GROUP BY task_id, task_name
     ORDER BY last_activity DESC;
   `;
 
   try {
-    const result = await pool.query(query, [groupId]);
+    const result = await pool.query(query);
     return result.rows;
   } catch (error) {
-    console.error('Error fetching group tasks summary:', error.message);
+    console.error('Error fetching tasks summary:', error.message);
     throw error;
   }
 }
@@ -216,8 +161,6 @@ module.exports = {
   Pool: pool,
   initializeDatabase,
   insertEventLog,
-  getGroupLogs,
   getTaskLogs,
-  getGroupsSummary,
-  getGroupTasksSummary
+  getTasksSummary
 };
